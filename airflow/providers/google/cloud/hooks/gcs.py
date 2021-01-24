@@ -24,6 +24,7 @@ import shutil
 import warnings
 from contextlib import contextmanager
 from datetime import datetime
+import dateutil
 from io import BytesIO
 from os import path
 from tempfile import NamedTemporaryFile
@@ -696,7 +697,7 @@ class GCSHook(GoogleBaseHook):
 
             blob_names = []
             for blob in blobs:
-                if timespan_start <= blob.updated.replace(tzinfo=pytz.UTC) < timespan_end:
+                if timespan_start <= blob.updated.replace(tzinfo=dateutil.tz.tzutc()) < timespan_end:
                     blob_names.append(blob.name)
 
             prefixes = blobs.prefixes
