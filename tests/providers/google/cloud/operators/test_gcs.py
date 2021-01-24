@@ -211,6 +211,28 @@ class TestGCSFileTransformOperator(unittest.TestCase):
 from datetime import datetime, timezone, timedelta
 
 
+class TestGCSTimeSpanFileTransformOperatorDateInterpolation(unittest.TestCase):
+    def test_execute(self):
+        d = datetime(2015, 2, 1, 15, 16, 17, 345, tzinfo=timezone.utc)
+
+        assert GCSTimeSpanFileTransformOperator.interpolate_prefix(None, d) == None
+
+        assert GCSTimeSpanFileTransformOperator.interpolate_prefix(
+            "prefix_without_date", d
+        ) == "prefix_without_date"
+
+        assert GCSTimeSpanFileTransformOperator.interpolate_prefix(
+            "prefix_with_year_%Y", d
+        ) == "prefix_with_year_2015"
+
+        assert GCSTimeSpanFileTransformOperator.interpolate_prefix(
+            "prefix_with_year_month_day/%Y/%m/%d/", d
+        ) == "prefix_with_year_month_day/2015/02/01/"
+
+        assert GCSTimeSpanFileTransformOperator.interpolate_prefix(
+            "prefix_with_year_month_day_and_percent_%%/%Y/%m/%d/", d
+        ) == "prefix_with_year_month_day_and_percent_%/2015/02/01/"
+
 class TestGCSTimeSpanFileTransformOperator(unittest.TestCase):
     @mock.patch("airflow.providers.google.cloud.operators.gcs.NamedTemporaryFile")
     @mock.patch("airflow.providers.google.cloud.operators.gcs.subprocess")

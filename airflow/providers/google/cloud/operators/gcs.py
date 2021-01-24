@@ -19,7 +19,8 @@
 import subprocess
 import sys
 import warnings
-from tempfile import NamedTemporaryFile
+from datetime import datetime
+from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Dict, Iterable, List, Optional, Sequence, Union
 
 from google.api_core.exceptions import Conflict
@@ -656,6 +657,8 @@ class GCSFileTransformOperator(BaseOperator):
             )
 
 
+from pathlib import Path
+
 
 class GCSTimeSpanFileTransformOperator(BaseOperator):
     """
@@ -724,6 +727,10 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
         'impersonation_chain',
     )
 
+    @staticmethod
+    def interpolate_prefix(prefix, dt):
+        return None if prefix is None else dt.strftime(prefix)
+
     @apply_defaults
     def __init__(
         self,
@@ -755,45 +762,86 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
 
 
     def execute(self, context: dict) -> None:
-        self.interval_start = context["execution_date"]
-        self.interval_end = context["dag"].following_schedule(self.interval_start)
+        # Define intervals and prefixes.
+        timespan_start = context["execution_date"]
+        timespan_end = context["dag"].following_schedule(timespan_start)
 
-        print(self.interval_start)
-        print(self.interval_end)
+        source_prefix_interp = GCSTimeSpanFileTransformOperator.interpolate_prefix(
+            self.source_prefix,
+            timespan_start,
+        )
+        destination_prefix_interp = GCSTimeSpanFileTransformOperator.interpolate_prefix(
+            self.destination_prefix,
+            timespan_start,
+        )
 
-        # source_prefix_interp =
-        #
-        # hook = GCSHook(gcp_conn_id=self.gcp_conn_id, impersonation_chain=self.impersonation_chain)
-        #
-        # with NamedTemporaryFile() as source_file, NamedTemporaryFile() as destination_file:
-        #     self.log.info("Downloading file from %s", self.source_bucket)
-        #     hook.download(
-        #         bucket_name=self.source_bucket, object_name=self.source_object, filename=source_file.name
-        #     )
-        #
-        #     self.log.info("Starting the transformation")
-        #     cmd = [self.transform_script] if isinstance(self.transform_script, str) else self.transform_script
-        #     cmd += [source_file.name, destination_file.name]
-        #     process = subprocess.Popen(
-        #         args=cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, close_fds=True
-        #     )
-        #     self.log.info("Process output:")
-        #     if process.stdout:
-        #         for line in iter(process.stdout.readline, b''):
-        #             self.log.info(line.decode(self.output_encoding).rstrip())
-        #
-        #     process.wait()
-        #     if process.returncode:
-        #         raise AirflowException(f"Transform script failed: {process.returncode}")
-        #
-        #     self.log.info("Transformation succeeded. Output temporarily located at %s", destination_file.name)
-        #
-        #     self.log.info("Uploading file to %s as %s", self.destination_bucket, self.destination_object)
-        #     hook.upload(
-        #         bucket_name=self.destination_bucket,
-        #         object_name=self.destination_object,
-        #         filename=destination_file.name,
-        #     )
+        source_hook = GCSHook(
+            gcp_conn_id=self.source_gcp_conn_id,
+            impersonation_chain=self.source_impersonation_chain,
+        )
+        destination_hook = GCSHook(
+            gcp_conn_id=self.destination_gcp_conn_id,
+            impersonation_chain=self.destination_impersonation_chain,
+        )
+
+        # Fetch list of files.
+        blobs_to_transform = source_hook.list_by_timespan(
+            bucket=self.source_bucket,
+            prefixes=source_prefix_interp,
+            timespan_start=timespan_start,
+            timespan_end=timespan_end,
+        )
+
+        with TemporaryDirectory() as temp_input_dir, TemporaryDirectory() as temp_output_dir:
+            temp_input_dir = Path(temp_input_dir)
+            temp_output_dir = Path(temp_output_dir)
+
+            # TODO: download in parallel.
+            for blob_to_transform in blobs_to_transform:
+                destination_file = temp_input_dir / blob_to_transform
+                destination_file.parent.mkdir(parents=True, exist_ok=True)
+                source_hook.download(
+                    bucket_name=self.source_bucket, object_name=blob_to_transform, filename=str(destination_file),
+                )
+
+            self.log.info("Starting the transformation")
+            cmd = [self.transform_script] if isinstance(self.transform_script, str) else self.transform_script
+            cmd += [
+                str(temp_input_dir),
+                str(temp_output_dir),
+                timespan_start.replace(microsecond=0).isoformat(),
+                timespan_end.replace(microsecond=0).isoformat(),
+            ]
+            process = subprocess.Popen(
+                args=cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, close_fds=True
+            )
+            self.log.info("Process output:")
+            if process.stdout:
+                for line in iter(process.stdout.readline, b''):
+                    self.log.info(line.decode(self.output_encoding).rstrip())
+
+            files_uploaded = []
+
+            for upload_file in temp_output_dir.glob("**/*"):
+                if upload_file.is_dir():
+                    continue
+
+                upload_file_name = str(upload_file.relative_to(temp_output_dir))
+
+                if self.destination_prefix is not None:
+                    upload_file_name = f"{self.destination_prefix_interp}/{upload_file_name}"
+
+                self.log.info(f"Uploading file {upload_file} to {upload_file_name}")
+
+                destination_hook.upload(
+                    blob_to_transform=self.destination_bucket,
+                    object_name=upload_file_name,
+                    filename=str(upload_file),
+
+                )
+                files_uploaded.append(str(upload_file_name))
+
+            return files_uploaded
 
 
 class GCSDeleteBucketOperator(BaseOperator):
