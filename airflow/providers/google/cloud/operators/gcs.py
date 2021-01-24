@@ -656,6 +656,139 @@ class GCSFileTransformOperator(BaseOperator):
             )
 
 
+
+class GCSTimeSpanFileTransformOperator(BaseOperator):
+    """
+    Determines a list of objects that were added or modified at a GCS source
+    location during a specific time-span, copies them to a temporary location
+    on the local file system, runs a transform on this file as specified by
+    the transformation script and uploads te output to the destination bucket.
+
+    The locations of the source and the destination files in the local
+    filesystem is provided as an first and second arguments to the
+    transformation script. The time-span is passed to the transform script as
+    third and fourth argument as UTC ISO 8601 string.
+
+    The transformation script is expected to read the
+    data from source, transform it and write the output to the local
+    destination file.
+
+    :param source_bucket: The bucket to fetch data from. (templated)
+    :type source_bucket: str
+    :param source_prefix: Prefix string which filters objects whose name begin with
+           this prefix. Can inerpolate execution date and time components. (templated)
+    :type source_prefix: str
+    :param source_gcp_conn_id: The connection ID to use connecting to Google Cloud
+           to download files to be processed.
+    :type source_gcp_conn_id: str
+    :param source_impersonation_chain: Optional service account to impersonate using short-term
+        credentials (to download files to be processed), or chained list of accounts required to
+        get the access_token of the last account in the list, which will be impersonated in the
+        request. If set as a string, the account must grant the originating account
+        the Service Account Token Creator IAM role.
+        If set as a sequence, the identities from the list must grant
+        Service Account Token Creator IAM role to the directly preceding identity, with first
+        account from the list granting this role to the originating account (templated).
+    :type impersonation_chain: Union[str, Sequence[str]]
+
+    :param destination_bucket: The bucket to write data to. (templated)
+    :type destination_bucket: str
+    :param destination_prefix: Prefix string for the upload location.
+        Can inerpolate execution date and time components. (templated)
+    :type destination_prefix: str
+    :param destination_gcp_conn_id: The connection ID to use connecting to Google Cloud
+           to upload processed files.
+    :type destination_gcp_conn_id: str
+    :param destination_impersonation_chain: Optional service account to impersonate using short-term
+        credentials (to upload processed files), or chained list of accounts required to get the access_token
+        of the last account in the list, which will be impersonated in the request.
+        If set as a string, the account must grant the originating account
+        the Service Account Token Creator IAM role.
+        If set as a sequence, the identities from the list must grant
+        Service Account Token Creator IAM role to the directly preceding identity, with first
+        account from the list granting this role to the originating account (templated).
+    :type impersonation_chain: Union[str, Sequence[str]]
+
+    :param transform_script: location of the executable transformation script or list of arguments
+        passed to subprocess ex. `['python', 'script.py', 10]`. (templated)
+    :type transform_script: Union[str, List[str]]
+
+    """
+
+    template_fields = (
+        'source_bucket',
+        'destination_bucket',
+        'transform_script',
+        'impersonation_chain',
+    )
+
+    @apply_defaults
+    def __init__(
+        self,
+        *,
+        source_bucket: str,
+        source_prefix: str,
+        source_gcp_conn_id: str,
+        destination_bucket: str,
+        destination_prefix: str,
+        destination_gcp_conn_id: str,
+        transform_script: Union[str, List[str]],
+        source_impersonation_chain: Optional[Union[str, Sequence[str]]] = None,
+        destination_impersonation_chain: Optional[Union[str, Sequence[str]]] = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.source_bucket = source_bucket
+        self.source_prefix = source_prefix
+        self.source_gcp_conn_id = source_gcp_conn_id
+        self.source_impersonation_chain = source_impersonation_chain
+
+        self.destination_bucket = destination_bucket
+        self.destination_prefix = destination_prefix
+        self.destination_gcp_conn_id = destination_gcp_conn_id
+        self.destination_impersonation_chain = destination_impersonation_chain
+
+        self.transform_script = transform_script
+        self.output_encoding = sys.getdefaultencoding()
+
+
+    def execute(self, context: dict) -> None:
+        self.interval_start = context["execution_date"]
+        self.interval_end = context["dag"].following_schedule(self.interval_start)
+
+        hook = GCSHook(gcp_conn_id=self.gcp_conn_id, impersonation_chain=self.impersonation_chain)
+
+        with NamedTemporaryFile() as source_file, NamedTemporaryFile() as destination_file:
+            self.log.info("Downloading file from %s", self.source_bucket)
+            hook.download(
+                bucket_name=self.source_bucket, object_name=self.source_object, filename=source_file.name
+            )
+
+            self.log.info("Starting the transformation")
+            cmd = [self.transform_script] if isinstance(self.transform_script, str) else self.transform_script
+            cmd += [source_file.name, destination_file.name]
+            process = subprocess.Popen(
+                args=cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, close_fds=True
+            )
+            self.log.info("Process output:")
+            if process.stdout:
+                for line in iter(process.stdout.readline, b''):
+                    self.log.info(line.decode(self.output_encoding).rstrip())
+
+            process.wait()
+            if process.returncode:
+                raise AirflowException(f"Transform script failed: {process.returncode}")
+
+            self.log.info("Transformation succeeded. Output temporarily located at %s", destination_file.name)
+
+            self.log.info("Uploading file to %s as %s", self.destination_bucket, self.destination_object)
+            hook.upload(
+                bucket_name=self.destination_bucket,
+                object_name=self.destination_object,
+                filename=destination_file.name,
+            )
+
+
 class GCSDeleteBucketOperator(BaseOperator):
     """
     Deletes bucket from a Google Cloud Storage.
