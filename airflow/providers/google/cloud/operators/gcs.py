@@ -717,7 +717,9 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
 
     template_fields = (
         'source_bucket',
-        'destination_bucket',
+        'source_prefix',
+        'destination_bucket'
+        'destination_prefix',
         'transform_script',
         'impersonation_chain',
     )
@@ -756,37 +758,42 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
         self.interval_start = context["execution_date"]
         self.interval_end = context["dag"].following_schedule(self.interval_start)
 
-        hook = GCSHook(gcp_conn_id=self.gcp_conn_id, impersonation_chain=self.impersonation_chain)
+        print(self.interval_start)
+        print(self.interval_end)
 
-        with NamedTemporaryFile() as source_file, NamedTemporaryFile() as destination_file:
-            self.log.info("Downloading file from %s", self.source_bucket)
-            hook.download(
-                bucket_name=self.source_bucket, object_name=self.source_object, filename=source_file.name
-            )
-
-            self.log.info("Starting the transformation")
-            cmd = [self.transform_script] if isinstance(self.transform_script, str) else self.transform_script
-            cmd += [source_file.name, destination_file.name]
-            process = subprocess.Popen(
-                args=cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, close_fds=True
-            )
-            self.log.info("Process output:")
-            if process.stdout:
-                for line in iter(process.stdout.readline, b''):
-                    self.log.info(line.decode(self.output_encoding).rstrip())
-
-            process.wait()
-            if process.returncode:
-                raise AirflowException(f"Transform script failed: {process.returncode}")
-
-            self.log.info("Transformation succeeded. Output temporarily located at %s", destination_file.name)
-
-            self.log.info("Uploading file to %s as %s", self.destination_bucket, self.destination_object)
-            hook.upload(
-                bucket_name=self.destination_bucket,
-                object_name=self.destination_object,
-                filename=destination_file.name,
-            )
+        # source_prefix_interp =
+        #
+        # hook = GCSHook(gcp_conn_id=self.gcp_conn_id, impersonation_chain=self.impersonation_chain)
+        #
+        # with NamedTemporaryFile() as source_file, NamedTemporaryFile() as destination_file:
+        #     self.log.info("Downloading file from %s", self.source_bucket)
+        #     hook.download(
+        #         bucket_name=self.source_bucket, object_name=self.source_object, filename=source_file.name
+        #     )
+        #
+        #     self.log.info("Starting the transformation")
+        #     cmd = [self.transform_script] if isinstance(self.transform_script, str) else self.transform_script
+        #     cmd += [source_file.name, destination_file.name]
+        #     process = subprocess.Popen(
+        #         args=cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, close_fds=True
+        #     )
+        #     self.log.info("Process output:")
+        #     if process.stdout:
+        #         for line in iter(process.stdout.readline, b''):
+        #             self.log.info(line.decode(self.output_encoding).rstrip())
+        #
+        #     process.wait()
+        #     if process.returncode:
+        #         raise AirflowException(f"Transform script failed: {process.returncode}")
+        #
+        #     self.log.info("Transformation succeeded. Output temporarily located at %s", destination_file.name)
+        #
+        #     self.log.info("Uploading file to %s as %s", self.destination_bucket, self.destination_object)
+        #     hook.upload(
+        #         bucket_name=self.destination_bucket,
+        #         object_name=self.destination_object,
+        #         filename=destination_file.name,
+        #     )
 
 
 class GCSDeleteBucketOperator(BaseOperator):

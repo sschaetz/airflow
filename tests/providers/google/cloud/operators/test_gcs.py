@@ -25,6 +25,7 @@ from airflow.providers.google.cloud.operators.gcs import (
     GCSDeleteBucketOperator,
     GCSDeleteObjectsOperator,
     GCSFileTransformOperator,
+    GCSTimeSpanFileTransformOperator,
     GCSListObjectsOperator,
     GCSObjectCreateAclEntryOperator,
     GCSSynchronizeBucketsOperator,
@@ -189,6 +190,78 @@ class TestGCSFileTransformOperator(unittest.TestCase):
             transform_script=transform_script,
         )
         op.execute(None)
+
+        mock_hook.return_value.download.assert_called_once_with(
+            bucket_name=source_bucket, object_name=source_object, filename=source
+        )
+
+        mock_subprocess.Popen.assert_called_once_with(
+            args=[transform_script, source, destination],
+            stdout="pipe",
+            stderr="stdout",
+            close_fds=True,
+        )
+
+        mock_hook.return_value.upload.assert_called_with(
+            bucket_name=destination_bucket,
+            object_name=destination_object,
+            filename=destination,
+        )
+
+from datetime import datetime, timezone, timedelta
+
+
+class TestGCSTimeSpanFileTransformOperator(unittest.TestCase):
+    @mock.patch("airflow.providers.google.cloud.operators.gcs.NamedTemporaryFile")
+    @mock.patch("airflow.providers.google.cloud.operators.gcs.subprocess")
+    @mock.patch("airflow.providers.google.cloud.operators.gcs.GCSHook")
+    def test_execute(self, mock_hook, mock_subprocess, mock_tempfile):
+        source_bucket = TEST_BUCKET
+        source_prefix = "POPULATE ME"
+        source_gcp_conn_id = ""
+
+        destination_bucket = TEST_BUCKET
+        destination_prefix = "POPULATE ME"
+        destination_gcp_conn_id = ""
+
+        transform_script = "script.py"
+
+        source = "source"
+        destination = "destination"
+
+        mock_dag = mock.Mock()
+        mock_dag.following_schedule = lambda x: x + timedelta(hours=1)
+        context = dict(
+            execution_date=datetime(2015, 2, 1, 15, 16, 17, 345, tzinfo=timezone.utc),
+            dag=mock_dag,
+        )
+
+        # Mock the name attribute...
+        mock1 = mock.Mock()
+        mock2 = mock.Mock()
+        mock1.name = source
+        mock2.name = destination
+
+        mock_tempfile.return_value.__enter__.side_effect = [mock1, mock2]
+
+        mock_subprocess.PIPE = "pipe"
+        mock_subprocess.STDOUT = "stdout"
+        mock_subprocess.Popen.return_value.stdout.readline = lambda: b""
+        mock_subprocess.Popen.return_value.wait.return_value = None
+        mock_subprocess.Popen.return_value.returncode = 0
+
+        op = GCSTimeSpanFileTransformOperator(
+            task_id=TASK_ID,
+            source_bucket=source_bucket,
+            source_prefix=source_prefix,
+            source_gcp_conn_id=source_gcp_conn_id,
+            destination_bucket=destination_bucket,
+            destination_prefix=destination_prefix,
+            destination_gcp_conn_id=destination_gcp_conn_id,
+            transform_script=transform_script,
+        )
+
+        op.execute(context=context)
 
         mock_hook.return_value.download.assert_called_once_with(
             bucket_name=source_bucket, object_name=source_object, filename=source
