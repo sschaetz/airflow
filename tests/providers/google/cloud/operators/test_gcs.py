@@ -17,6 +17,7 @@
 # under the License.
 
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from airflow.providers.google.cloud.operators.gcs import (
@@ -242,16 +243,16 @@ class TestGCSTimeSpanFileTransformOperatorDateInterpolation(unittest.TestCase):
 
 
 class TestGCSTimeSpanFileTransformOperator(unittest.TestCase):
-    @mock.patch("airflow.providers.google.cloud.operators.gcs.NamedTemporaryFile")
+    @mock.patch("airflow.providers.google.cloud.operators.gcs.TemporaryDirectory")
     @mock.patch("airflow.providers.google.cloud.operators.gcs.subprocess")
     @mock.patch("airflow.providers.google.cloud.operators.gcs.GCSHook")
-    def test_execute(self, mock_hook, mock_subprocess, mock_tempfile):
+    def test_execute(self, mock_hook, mock_subprocess, mock_tempdir):
         source_bucket = TEST_BUCKET
-        source_prefix = "POPULATE ME"
+        source_prefix = "source_prefix"
         source_gcp_conn_id = ""
 
-        destination_bucket = TEST_BUCKET
-        destination_prefix = "POPULATE ME"
+        destination_bucket = TEST_BUCKET + "_dest"
+        destination_prefix = "destination_prefix"
         destination_gcp_conn_id = ""
 
         transform_script = "script.py"
@@ -259,10 +260,12 @@ class TestGCSTimeSpanFileTransformOperator(unittest.TestCase):
         source = "source"
         destination = "destination"
 
+        timespan_start = datetime(2015, 2, 1, 15, 16, 17, 345, tzinfo=timezone.utc)
+        timespan_end = timespan_start + timedelta(hours=1)
         mock_dag = mock.Mock()
         mock_dag.following_schedule = lambda x: x + timedelta(hours=1)
         context = dict(
-            execution_date=datetime(2015, 2, 1, 15, 16, 17, 345, tzinfo=timezone.utc),
+            execution_date=timespan_start,
             dag=mock_dag,
         )
 
@@ -272,7 +275,9 @@ class TestGCSTimeSpanFileTransformOperator(unittest.TestCase):
         mock1.name = source
         mock2.name = destination
 
-        mock_tempfile.return_value.__enter__.side_effect = [mock1, mock2]
+        mock_tempdir.return_value.__enter__.side_effect = ["source", "destination"]
+
+        mock_hook.return_value.list_by_timespan.return_value = ['file1', 'file2']
 
         mock_subprocess.PIPE = "pipe"
         mock_subprocess.STDOUT = "stdout"
@@ -291,23 +296,53 @@ class TestGCSTimeSpanFileTransformOperator(unittest.TestCase):
             transform_script=transform_script,
         )
 
-        op.execute(context=context)
+        with mock.patch.object(Path, 'glob') as path_glob:
+            path_glob.return_value.__iter__.return_value = [
+                Path('destination/file1'),
+                Path('destination/file2'),
+            ]
+            op.execute(context=context)
 
-        mock_hook.return_value.download.assert_called_once_with(
-            bucket_name=source_bucket, object_name=source_object, filename=source
+        mock_hook.return_value.list_by_timespan.assert_called_once_with(
+            bucket_name=source_bucket,
+            timespan_start=timespan_start,
+            timespan_end=timespan_end,
+            prefix=source_prefix,
+        )
+
+        mock_hook.return_value.download.assert_has_calls(
+            [
+                mock.call(bucket_name=source_bucket, object_name='file1', filename="source/file1"),
+                mock.call(bucket_name=source_bucket, object_name='file2', filename="source/file2"),
+            ]
         )
 
         mock_subprocess.Popen.assert_called_once_with(
-            args=[transform_script, source, destination],
+            args=[
+                transform_script,
+                source,
+                destination,
+                '2015-02-01T15:16:17+00:00',
+                '2015-02-01T16:16:17+00:00',
+            ],
             stdout="pipe",
             stderr="stdout",
             close_fds=True,
         )
 
-        mock_hook.return_value.upload.assert_called_with(
-            bucket_name=destination_bucket,
-            object_name=destination_object,
-            filename=destination,
+        mock_hook.return_value.upload.assert_has_calls(
+            [
+                mock.call(
+                    bucket_name=destination_bucket,
+                    filename='destination/file1',
+                    object_name='destination_prefix/file1',
+                ),
+                mock.call(
+                    bucket_name=destination_bucket,
+                    filename='destination/file2',
+                    object_name='destination_prefix/file2',
+                ),
+            ]
         )
 
 

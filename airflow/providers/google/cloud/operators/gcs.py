@@ -20,6 +20,7 @@ import subprocess
 import sys
 import warnings
 from datetime import datetime
+from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Dict, Iterable, List, Optional, Sequence, Union
 
@@ -657,9 +658,6 @@ class GCSFileTransformOperator(BaseOperator):
             )
 
 
-from pathlib import Path
-
-
 class GCSTimeSpanFileTransformOperator(BaseOperator):
     """
     Determines a list of objects that were added or modified at a GCS source
@@ -785,8 +783,8 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
 
         # Fetch list of files.
         blobs_to_transform = source_hook.list_by_timespan(
-            bucket=self.source_bucket,
-            prefixes=source_prefix_interp,
+            bucket_name=self.source_bucket,
+            prefix=source_prefix_interp,
             timespan_start=timespan_start,
             timespan_end=timespan_end,
         )
@@ -823,6 +821,7 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
 
             files_uploaded = []
 
+            # TODO: upload in parallel.
             for upload_file in temp_output_dir.glob("**/*"):
                 if upload_file.is_dir():
                     continue
@@ -830,12 +829,12 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
                 upload_file_name = str(upload_file.relative_to(temp_output_dir))
 
                 if self.destination_prefix is not None:
-                    upload_file_name = f"{self.destination_prefix_interp}/{upload_file_name}"
+                    upload_file_name = f"{destination_prefix_interp}/{upload_file_name}"
 
                 self.log.info(f"Uploading file {upload_file} to {upload_file_name}")
 
                 destination_hook.upload(
-                    blob_to_transform=self.destination_bucket,
+                    bucket_name=self.destination_bucket,
                     object_name=upload_file_name,
                     filename=str(upload_file),
                 )
