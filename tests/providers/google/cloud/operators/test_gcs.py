@@ -17,6 +17,7 @@
 # under the License.
 
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -210,33 +211,32 @@ class TestGCSFileTransformOperator(unittest.TestCase):
         )
 
 
-from datetime import datetime, timedelta, timezone
-
-
 class TestGCSTimeSpanFileTransformOperatorDateInterpolation(unittest.TestCase):
     def test_execute(self):
-        d = datetime(2015, 2, 1, 15, 16, 17, 345, tzinfo=timezone.utc)
+        interp_dt = datetime(2015, 2, 1, 15, 16, 17, 345, tzinfo=timezone.utc)
 
-        assert GCSTimeSpanFileTransformOperator.interpolate_prefix(None, d) == None
+        assert GCSTimeSpanFileTransformOperator.interpolate_prefix(None, interp_dt) is None
 
         assert (
-            GCSTimeSpanFileTransformOperator.interpolate_prefix("prefix_without_date", d)
+            GCSTimeSpanFileTransformOperator.interpolate_prefix("prefix_without_date", interp_dt)
             == "prefix_without_date"
         )
 
         assert (
-            GCSTimeSpanFileTransformOperator.interpolate_prefix("prefix_with_year_%Y", d)
+            GCSTimeSpanFileTransformOperator.interpolate_prefix("prefix_with_year_%Y", interp_dt)
             == "prefix_with_year_2015"
         )
 
         assert (
-            GCSTimeSpanFileTransformOperator.interpolate_prefix("prefix_with_year_month_day/%Y/%m/%d/", d)
+            GCSTimeSpanFileTransformOperator.interpolate_prefix(
+                "prefix_with_year_month_day/%Y/%m/%d/", interp_dt
+            )
             == "prefix_with_year_month_day/2015/02/01/"
         )
 
         assert (
             GCSTimeSpanFileTransformOperator.interpolate_prefix(
-                "prefix_with_year_month_day_and_percent_%%/%Y/%m/%d/", d
+                "prefix_with_year_month_day_and_percent_%%/%Y/%m/%d/", interp_dt
             )
             == "prefix_with_year_month_day_and_percent_%/2015/02/01/"
         )

@@ -30,7 +30,6 @@ from tempfile import NamedTemporaryFile
 from typing import Callable, List, Optional, Sequence, Set, Tuple, TypeVar, Union, cast
 from urllib.parse import urlparse
 
-import dateutil
 from google.api_core.exceptions import NotFound
 from google.cloud import storage
 
@@ -687,6 +686,8 @@ class GCSHook(GoogleBaseHook):
 
         ids = []
         page_token = None
+        import dateutil.tz
+
         while True:
             blobs = bucket.list_blobs(
                 max_results=max_results,

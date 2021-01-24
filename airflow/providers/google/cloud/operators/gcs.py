@@ -19,7 +19,6 @@
 import subprocess
 import sys
 import warnings
-from datetime import datetime
 from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Dict, Iterable, List, Optional, Sequence, Union
@@ -727,6 +726,14 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
 
     @staticmethod
     def interpolate_prefix(prefix, dt):
+        """Interpolate prefix with datetime.
+
+        :param prefix: The prefix to interpolate
+        :type prefix: str
+        :param dt: The datetime to interpolate
+        :type dt: datetime
+
+        """
         return None if prefix is None else dt.strftime(prefix)
 
     @apply_defaults
@@ -831,7 +838,7 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
                 if self.destination_prefix is not None:
                     upload_file_name = f"{destination_prefix_interp}/{upload_file_name}"
 
-                self.log.info(f"Uploading file {upload_file} to {upload_file_name}")
+                self.log.info("Uploading file %s to %s", upload_file, upload_file_name)
 
                 destination_hook.upload(
                     bucket_name=self.destination_bucket,
