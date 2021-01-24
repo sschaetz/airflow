@@ -24,13 +24,13 @@ import shutil
 import warnings
 from contextlib import contextmanager
 from datetime import datetime
-import dateutil
 from io import BytesIO
 from os import path
 from tempfile import NamedTemporaryFile
 from typing import Callable, List, Optional, Sequence, Set, Tuple, TypeVar, Union, cast
 from urllib.parse import urlparse
 
+import dateutil
 from google.api_core.exceptions import NotFound
 from google.cloud import storage
 
@@ -651,14 +651,15 @@ class GCSHook(GoogleBaseHook):
                 break
         return ids
 
-    def list_by_timespan(self,
+    def list_by_timespan(
+        self,
         bucket_name: str,
         timespan_start: datetime,
         timespan_end: datetime,
-        versions:bool=None,
-        max_results:int =None,
-        prefix:str =None,
-        delimiter:str=None,
+        versions: bool = None,
+        max_results: int = None,
+        prefix: str = None,
+        delimiter: str = None,
     ) -> list:
         """
         List all objects from the bucket with the give string prefix in name that were
@@ -711,7 +712,6 @@ class GCSHook(GoogleBaseHook):
                 # empty next page token
                 break
         return ids
-
 
     def get_size(self, bucket_name: str, object_name: str) -> int:
         """

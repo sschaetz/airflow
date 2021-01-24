@@ -721,7 +721,7 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
     template_fields = (
         'source_bucket',
         'source_prefix',
-        'destination_bucket'
+        'destination_bucket',
         'destination_prefix',
         'transform_script',
         'impersonation_chain',
@@ -759,7 +759,6 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
 
         self.transform_script = transform_script
         self.output_encoding = sys.getdefaultencoding()
-
 
     def execute(self, context: dict) -> None:
         # Define intervals and prefixes.
@@ -801,7 +800,9 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
                 destination_file = temp_input_dir / blob_to_transform
                 destination_file.parent.mkdir(parents=True, exist_ok=True)
                 source_hook.download(
-                    bucket_name=self.source_bucket, object_name=blob_to_transform, filename=str(destination_file),
+                    bucket_name=self.source_bucket,
+                    object_name=blob_to_transform,
+                    filename=str(destination_file),
                 )
 
             self.log.info("Starting the transformation")
@@ -837,7 +838,6 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
                     blob_to_transform=self.destination_bucket,
                     object_name=upload_file_name,
                     filename=str(upload_file),
-
                 )
                 files_uploaded.append(str(upload_file_name))
 

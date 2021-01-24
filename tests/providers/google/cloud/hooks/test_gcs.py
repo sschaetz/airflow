@@ -757,7 +757,9 @@ class TestGCSHook(unittest.TestCase):
         blob3.updated = datetime(2019, 8, 29, 14, 7, 20, 0, dateutil.tz.tzutc())
 
         mock_service.return_value.bucket.return_value.list_blobs.return_value.__iter__.return_value = [
-            blob1, blob2, blob3,
+            blob1,
+            blob2,
+            blob3,
         ]
         mock_service.return_value.bucket.return_value.list_blobs.return_value.prefixes = None
         mock_service.return_value.bucket.return_value.list_blobs.return_value.next_page_token = None
@@ -771,6 +773,7 @@ class TestGCSHook(unittest.TestCase):
 
         # Then
         assert len(response) == 2 and all(['in-interval' in b for b in response])
+
 
 class TestGCSHookUpload(unittest.TestCase):
     def setUp(self):

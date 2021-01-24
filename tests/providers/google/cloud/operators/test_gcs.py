@@ -25,10 +25,10 @@ from airflow.providers.google.cloud.operators.gcs import (
     GCSDeleteBucketOperator,
     GCSDeleteObjectsOperator,
     GCSFileTransformOperator,
-    GCSTimeSpanFileTransformOperator,
     GCSListObjectsOperator,
     GCSObjectCreateAclEntryOperator,
     GCSSynchronizeBucketsOperator,
+    GCSTimeSpanFileTransformOperator,
 )
 
 TASK_ID = "test-gcs-operator"
@@ -208,7 +208,8 @@ class TestGCSFileTransformOperator(unittest.TestCase):
             filename=destination,
         )
 
-from datetime import datetime, timezone, timedelta
+
+from datetime import datetime, timedelta, timezone
 
 
 class TestGCSTimeSpanFileTransformOperatorDateInterpolation(unittest.TestCase):
@@ -217,21 +218,28 @@ class TestGCSTimeSpanFileTransformOperatorDateInterpolation(unittest.TestCase):
 
         assert GCSTimeSpanFileTransformOperator.interpolate_prefix(None, d) == None
 
-        assert GCSTimeSpanFileTransformOperator.interpolate_prefix(
-            "prefix_without_date", d
-        ) == "prefix_without_date"
+        assert (
+            GCSTimeSpanFileTransformOperator.interpolate_prefix("prefix_without_date", d)
+            == "prefix_without_date"
+        )
 
-        assert GCSTimeSpanFileTransformOperator.interpolate_prefix(
-            "prefix_with_year_%Y", d
-        ) == "prefix_with_year_2015"
+        assert (
+            GCSTimeSpanFileTransformOperator.interpolate_prefix("prefix_with_year_%Y", d)
+            == "prefix_with_year_2015"
+        )
 
-        assert GCSTimeSpanFileTransformOperator.interpolate_prefix(
-            "prefix_with_year_month_day/%Y/%m/%d/", d
-        ) == "prefix_with_year_month_day/2015/02/01/"
+        assert (
+            GCSTimeSpanFileTransformOperator.interpolate_prefix("prefix_with_year_month_day/%Y/%m/%d/", d)
+            == "prefix_with_year_month_day/2015/02/01/"
+        )
 
-        assert GCSTimeSpanFileTransformOperator.interpolate_prefix(
-            "prefix_with_year_month_day_and_percent_%%/%Y/%m/%d/", d
-        ) == "prefix_with_year_month_day_and_percent_%/2015/02/01/"
+        assert (
+            GCSTimeSpanFileTransformOperator.interpolate_prefix(
+                "prefix_with_year_month_day_and_percent_%%/%Y/%m/%d/", d
+            )
+            == "prefix_with_year_month_day_and_percent_%/2015/02/01/"
+        )
+
 
 class TestGCSTimeSpanFileTransformOperator(unittest.TestCase):
     @mock.patch("airflow.providers.google.cloud.operators.gcs.NamedTemporaryFile")
