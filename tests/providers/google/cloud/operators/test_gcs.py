@@ -260,6 +260,9 @@ class TestGCSTimeSpanFileTransformOperator(unittest.TestCase):
         source = "source"
         destination = "destination"
 
+        file1 = "file1"
+        file2 = "file2"
+
         timespan_start = datetime(2015, 2, 1, 15, 16, 17, 345, tzinfo=timezone.utc)
         timespan_end = timespan_start + timedelta(hours=1)
         mock_dag = mock.Mock()
@@ -269,15 +272,11 @@ class TestGCSTimeSpanFileTransformOperator(unittest.TestCase):
             dag=mock_dag,
         )
 
-        # Mock the name attribute...
-        mock1 = mock.Mock()
-        mock2 = mock.Mock()
-        mock1.name = source
-        mock2.name = destination
-
-        mock_tempdir.return_value.__enter__.side_effect = ["source", "destination"]
-
-        mock_hook.return_value.list_by_timespan.return_value = ['file1', 'file2']
+        mock_tempdir.return_value.__enter__.side_effect = [source, destination]
+        mock_hook.return_value.list_by_timespan.return_value = [
+            f"{source_prefix}/{file1}",
+            f"{source_prefix}/{file2}",
+        ]
 
         mock_subprocess.PIPE = "pipe"
         mock_subprocess.STDOUT = "stdout"
@@ -298,8 +297,8 @@ class TestGCSTimeSpanFileTransformOperator(unittest.TestCase):
 
         with mock.patch.object(Path, 'glob') as path_glob:
             path_glob.return_value.__iter__.return_value = [
-                Path('destination/file1'),
-                Path('destination/file2'),
+                Path(f"{destination}/{file1}"),
+                Path(f"{destination}/{file2}"),
             ]
             op.execute(context=context)
 
@@ -312,8 +311,16 @@ class TestGCSTimeSpanFileTransformOperator(unittest.TestCase):
 
         mock_hook.return_value.download.assert_has_calls(
             [
-                mock.call(bucket_name=source_bucket, object_name='file1', filename="source/file1"),
-                mock.call(bucket_name=source_bucket, object_name='file2', filename="source/file2"),
+                mock.call(
+                    bucket_name=source_bucket,
+                    object_name=f"{source_prefix}/{file1}",
+                    filename=f"{source}/{source_prefix}/{file1}",
+                ),
+                mock.call(
+                    bucket_name=source_bucket,
+                    object_name=f"{source_prefix}/{file2}",
+                    filename=f"{source}/{source_prefix}/{file2}",
+                ),
             ]
         )
 
@@ -322,8 +329,8 @@ class TestGCSTimeSpanFileTransformOperator(unittest.TestCase):
                 transform_script,
                 source,
                 destination,
-                '2015-02-01T15:16:17+00:00',
-                '2015-02-01T16:16:17+00:00',
+                timespan_start.replace(microsecond=0).isoformat(),
+                timespan_end.replace(microsecond=0).isoformat(),
             ],
             stdout="pipe",
             stderr="stdout",
@@ -334,13 +341,13 @@ class TestGCSTimeSpanFileTransformOperator(unittest.TestCase):
             [
                 mock.call(
                     bucket_name=destination_bucket,
-                    filename='destination/file1',
-                    object_name='destination_prefix/file1',
+                    filename=f"{destination}/{file1}",
+                    object_name=f"{destination_prefix}/{file1}",
                 ),
                 mock.call(
                     bucket_name=destination_bucket,
-                    filename='destination/file2',
-                    object_name='destination_prefix/file2',
+                    filename=f"{destination}/{file2}",
+                    object_name=f"{destination_prefix}/{file2}",
                 ),
             ]
         )
