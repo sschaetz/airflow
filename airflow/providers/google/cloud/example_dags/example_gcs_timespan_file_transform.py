@@ -44,7 +44,8 @@ with models.DAG(
 ) as dag:
 
     # [START howto_operator_gcs_timespan_file_transform_operator_Task]
-    gcs_bucket_create_acl_entry_task = GCSTimeSpanFileTransformOperator(
+    gcs_timespan_transform_files_task = GCSTimeSpanFileTransformOperator(
+        task_id="gcs_timespan_transform_files",
         source_bucket=SOURCE_BUCKET,
         source_prefix=SOURCE_PREFIX,
         source_gcp_conn_id=SOURCE_GCP_CONN_ID,

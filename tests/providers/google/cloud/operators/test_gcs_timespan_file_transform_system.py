@@ -39,8 +39,9 @@ class GoogleCloudStorageExampleDagsTest(GoogleSystemTest):
         super().setUp()
 
         # 1. Create a bucket
+        self.execute_cmd(["gsutil", "mb", f"gs://{SOURCE_BUCKET}"])
 
-        # 2. Create a file to be processed and upload to prefix
+        # 2. Create a file to be processed and upload to source bucket using with source prefix
         with NamedTemporaryFile() as source_file:
             with open(source_file.name, "w+") as file:
                 file.writelines(["This is a test file"])
