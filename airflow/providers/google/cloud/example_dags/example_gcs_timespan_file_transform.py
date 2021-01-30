@@ -29,7 +29,7 @@ from airflow.utils.state import State
 SOURCE_BUCKET = os.environ.get("GCP_GCS_BUCKET_1", "test-gcs-example-bucket")
 SOURCE_PREFIX = "gcs_timespan_file_transform_source"
 SOURCE_GCP_CONN_ID = "google_cloud_default"
-DESTINATION_BUCKET = os.environ.get("GCP_GCS_BUCKET_1", "test-gcs-example-bucket")
+DESTINATION_BUCKET = SOURCE_BUCKET
 DESTINATION_PREFIX = "gcs_timespan_file_transform_destination"
 DESTINATION_GCP_CONN_ID = "google_cloud_default"
 
