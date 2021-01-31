@@ -16,6 +16,7 @@
 # specific language governing permissions and limitations
 # under the License.
 """This module contains a Google Cloud Storage Bucket operator."""
+import datetime
 import subprocess
 import sys
 import warnings
@@ -23,6 +24,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile, TemporaryDirectory
 from typing import Dict, Iterable, List, Optional, Sequence, Union
 
+import dateutil.tz
 from google.api_core.exceptions import Conflict
 
 from airflow.exceptions import AirflowException
@@ -689,7 +691,7 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
         If set as a sequence, the identities from the list must grant
         Service Account Token Creator IAM role to the directly preceding identity, with first
         account from the list granting this role to the originating account (templated).
-    :type impersonation_chain: Union[str, Sequence[str]]
+    :type source_impersonation_chain: Union[str, Sequence[str]]
 
     :param destination_bucket: The bucket to write data to. (templated)
     :type destination_bucket: str
@@ -707,7 +709,7 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
         If set as a sequence, the identities from the list must grant
         Service Account Token Creator IAM role to the directly preceding identity, with first
         account from the list granting this role to the originating account (templated).
-    :type impersonation_chain: Union[str, Sequence[str]]
+    :type destination_impersonation_chain: Union[str, Sequence[str]]
 
     :param transform_script: location of the executable transformation script or list of arguments
         passed to subprocess ex. `['python', 'script.py', 10]`. (templated)
@@ -721,7 +723,8 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
         'destination_bucket',
         'destination_prefix',
         'transform_script',
-        'impersonation_chain',
+        'source_impersonation_chain',
+        'destination_impersonation_chain',
     )
 
     @staticmethod
@@ -769,6 +772,12 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
         # Define intervals and prefixes.
         timespan_start = context["execution_date"]
         timespan_end = context["dag"].following_schedule(timespan_start)
+        if timespan_end is None:
+            self.log.warning("No following schedule found, setting timespan end to max %s", timespan_end)
+            timespan_end = datetime.datetime.max
+
+        timespan_start = timespan_start.replace(tzinfo=dateutil.tz.tzutc())
+        timespan_end = timespan_end.replace(tzinfo=dateutil.tz.tzutc())
 
         source_prefix_interp = GCSTimeSpanFileTransformOperator.interpolate_prefix(
             self.source_prefix,
@@ -825,6 +834,12 @@ class GCSTimeSpanFileTransformOperator(BaseOperator):
             if process.stdout:
                 for line in iter(process.stdout.readline, b''):
                     self.log.info(line.decode(self.output_encoding).rstrip())
+
+            process.wait()
+            if process.returncode:
+                raise AirflowException(f"Transform script failed: {process.returncode}")
+
+            self.log.info("Transformation succeeded. Output temporarily located at %s", temp_output_dir)
 
             files_uploaded = []
 

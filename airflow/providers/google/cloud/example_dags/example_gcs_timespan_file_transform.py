@@ -33,7 +33,9 @@ DESTINATION_BUCKET = SOURCE_BUCKET
 DESTINATION_PREFIX = "gcs_timespan_file_transform_destination"
 DESTINATION_GCP_CONN_ID = "google_cloud_default"
 
-PATH_TO_TRANSFORM_SCRIPT = os.environ.get('GCP_GCS_PATH_TO_TRANSFORM_SCRIPT', 'test.py')
+PATH_TO_TRANSFORM_SCRIPT = os.environ.get(
+    'GCP_GCS_PATH_TO_TRANSFORM_SCRIPT', 'test_gcs_timespan_transform_script.py'
+)
 
 
 with models.DAG(
