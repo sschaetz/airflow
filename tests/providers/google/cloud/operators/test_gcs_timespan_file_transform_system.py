@@ -88,7 +88,7 @@ with open(Path(destination) / "output.txt", "w+") as dest:
         os.remove(PATH_TO_TRANSFORM_SCRIPT)
 
         # 2. Delete bucket
-        # self.execute_cmd(["gsutil", "rm", "-r", f"gs://{SOURCE_BUCKET}"])
+        self.execute_cmd(["gsutil", "rm", "-r", f"gs://{SOURCE_BUCKET}"])
 
         super().tearDown()
 
